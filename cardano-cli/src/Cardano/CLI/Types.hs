@@ -9,7 +9,6 @@ module Cardano.CLI.Types
   , OutputFormat (..)
   , QueryFilter (..)
   , SigningKeyFile (..)
-  , SigningKeyOrScriptFile (..)
   , SocketPath (..)
   , ScriptFile (..)
   , TxOutAnyEra (..)
@@ -78,10 +77,6 @@ newtype VerificationKeyFile
 
 newtype ScriptFile = ScriptFile { unScriptFile :: FilePath }
                      deriving (Eq, Show)
-
-data SigningKeyOrScriptFile = ScriptFileForWitness FilePath
-                            | SigningKeyFileForWitness FilePath
-                            deriving (Eq, Show)
 
 -- | A TxOut value that is the superset of possibilities for any era: any
 -- address type and allowing multi-asset values. This is used as the type for
