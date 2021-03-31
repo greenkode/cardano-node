@@ -29,9 +29,6 @@ let
   # will run twice.
   cabalProjectLocal = ''
     allow-newer: terminfo:base
-  ''
-  # Needed for the Windows cabal constraint solver.
-  + lib.optionalString stdenv.hostPlatform.isWindows ''
   '';
 
   projectPackages = lib.attrNames (haskell-nix.haskellLib.selectProjectPackages
