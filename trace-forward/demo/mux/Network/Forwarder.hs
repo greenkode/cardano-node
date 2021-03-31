@@ -107,7 +107,7 @@ doConnectToAcceptor snocket address timeLimits benchFillFreq (ekgConfig, tfConfi
   tfQueue <- newTBQueueIO 1000000
   _ <- async $ loWriter tfQueue benchFillFreq
   store <- EKG.newStore
-  EKG.registerGcMetrics store
+  -- EKG.registerGcMetrics store
 
   connectToNode
     snocket

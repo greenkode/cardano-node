@@ -1,9 +1,11 @@
 {-# LANGUAGE LambdaCase #-}
 
-import           Control.Concurrent (threadDelay)
-import           Control.Concurrent.Async (async)
+import           Control.Concurrent (ThreadId, killThread, myThreadId, threadDelay)
+import           Control.Concurrent.Async (async, asyncThreadId, withAsync)
+import           Control.Concurrent.STM (atomically)
+import           Control.Concurrent.STM.TVar
 import           Control.Tracer (contramap, nullTracer, stdoutTracer)
-import           Control.Monad (void, when)
+import           Control.Monad (forever, void, when)
 import           Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import           Data.Fixed (Pico)
 import           Data.Maybe (isJust)
@@ -24,39 +26,64 @@ import           Network.Acceptor (HowToConnect (..), launchAcceptors)
 
 main :: IO ()
 main = do
-  (listenIt, freq, itemsNum, benchSpeedFreq, totalObjs) <-
-    getArgs >>= \case
-      [path, freq, n] ->
-        return ( LocalPipe path
-               , read freq :: Pico
-               , read n :: Word16
-               , Nothing
-               , Nothing
-               )
-      [host, port, freq, n] ->
-        return ( RemoteSocket host port
-               , read freq :: Pico
-               , read n :: Word16
-               , Nothing
-               , Nothing
-               )
-      [path, freq, n, "-b", sp] ->
-        return ( LocalPipe path
-               , read freq :: Pico
-               , read n :: Word16
-               , Just (read sp :: Pico)
-               , Nothing
-               )
-      [path, freq, n, "-b", sp, "-t", tn] ->
-        return ( LocalPipe path
-               , read freq :: Pico
-               , read n :: Word16
-               , Just (read sp :: Pico)
-               , Just (read tn :: Word64)
-               )
-      _ ->
-        die "Usage: demo-acceptor-mux (pathToPipe | host port) freqInSecs itemsNum [-b freqInSecs] [-t totalObjs]"
-  launchAcceptors listenIt =<< mkConfigs listenIt freq itemsNum benchSpeedFreq totalObjs
+  (listenIt, freq, itemsNum, benchSpeedFreq, totalObjs, reConnectTest) <- do
+    args <- getArgs
+    if "--dc" `elem` args
+      then
+        case args of
+          [host, port, "--dc", freq] ->
+            return ( RemoteSocket host port
+                   , 1   -- This is disconnect test, so the frequency of requests doesn't matter.
+                   , 100 -- This is disconnect test, so the number of requested LogObjects doesn't matter.
+                   , Nothing
+                   , Nothing
+                   , Just (read freq :: Pico) -- This is how often the server will be shut down.
+                   )
+          _ -> die "Usage: demo-acceptor-mux host port --dc freqInSecs"
+      else
+        case args of
+          [path, freq, n] ->
+            return ( LocalPipe path
+                   , read freq :: Pico
+                   , read n :: Word16
+                   , Nothing
+                   , Nothing
+                   , Nothing
+                   )
+          [host, port, freq, n] ->
+            return ( RemoteSocket host port
+                   , read freq :: Pico
+                   , read n :: Word16
+                   , Nothing
+                   , Nothing
+                   , Nothing
+                   )
+          [path, freq, n, "-b", sp] ->
+            return ( LocalPipe path
+                   , read freq :: Pico
+                   , read n :: Word16
+                   , Just (read sp :: Pico)
+                   , Nothing
+                   , Nothing
+                   )
+          [path, freq, n, "-b", sp, "-t", tn] ->
+            return ( LocalPipe path
+                   , read freq :: Pico
+                   , read n :: Word16
+                   , Just (read sp :: Pico)
+                   , Just (read tn :: Word64)
+                   , Nothing
+                   )
+          _ ->
+            die "Usage: demo-acceptor-mux (pathToPipe | host port) freqInSecs itemsNum [-b freqInSecs] [-t totalObjs]"
+
+  configs <- mkConfigs listenIt freq itemsNum benchSpeedFreq totalObjs
+
+  tidVar <- newTVarIO =<< myThreadId -- Just for filling TVar, it will be replaced anyway.
+
+  case reConnectTest of
+    Nothing -> launchAcceptors listenIt configs tidVar
+    Just rcFreq -> runReConnector (launchAcceptors listenIt configs tidVar) rcFreq tidVar
 
 mkConfigs
   :: HowToConnect
@@ -150,5 +177,16 @@ mkConfigs listenIt freq itemsNum benchSpeedFreq totalObjs = do
         atomicModifyIORef' stopTF   $ \_ -> (True, ())
         atomicModifyIORef' stopEKGF $ \_ -> (True, ())
 
-  toMicroSecs :: NominalDiffTime -> Int
-  toMicroSecs dt = fromEnum dt `div` 1000000
+toMicroSecs :: NominalDiffTime -> Int
+toMicroSecs dt = fromEnum dt `div` 1000000
+
+runReConnector :: IO () -> Pico -> TVar ThreadId -> IO ()
+runReConnector acceptor rcFreq tidVar = forever $ do
+  putStrLn "ReConnect test, start acceptor..."
+  withAsync acceptor $ \aid -> do
+    threadDelay . toMicroSecs . secondsToNominalDiffTime $ rcFreq
+    putStrLn "ReConnect test, stop acceptor..."
+    tid <- atomically $ readTVar tidVar
+    putStrLn $ "KILL TID: " <> show tid
+    killThread tid
+    killThread (asyncThreadId aid)
