@@ -81,13 +81,13 @@ data Stakes =  Stakes {
 
 -- | Pretty printing for stake information
 instance ToJSON Stakes where
-    toJSON (Stakes m s g mt st gt) =
-        object ["poolStakeMark" .= m, "poolStakeSet" .= s, "poolStakeGo" .= g,
-                "activeStakeMark" .= mt, "activeStakeSet" .= st, "activeStakeGo" .= gt]
+  toJSON (Stakes m s g mt st gt) =
+    object [ "poolStakeMark" .= m, "poolStakeSet" .= s, "poolStakeGo" .= g,
+             "activeStakeMark" .= mt, "activeStakeSet" .= st, "activeStakeGo" .= gt ]
 
-    toEncoding  (Stakes m s g mt st gt) =
-        pairs ("poolStakeMark" .= m <> "poolStakeSet" .= s <> "poolStakeGo" .= g <>
-               "activeStakeMark" .= mt <> "activeStakeSet" .= st <> "activeStakeGo" .= gt)
+  toEncoding  (Stakes m s g mt st gt) =
+    pairs ( "poolStakeMark" .= m <> "poolStakeSet" .= s <> "poolStakeGo" .= g <>
+            "activeStakeMark" .= mt <> "activeStakeSet" .= st <> "activeStakeGo" .= gt )
 
 -- | This data structure is used to allow nicely formatted output in the query pool-params command.
 -- params are the current pool parameter settings, futureparams are new parameters, retiringEpoch is the
